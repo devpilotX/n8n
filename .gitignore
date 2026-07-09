@@ -1,0 +1,33 @@
+# ============================================================
+# NEVER commit secrets. This repo stores CONFIG + WORKFLOWS only.
+# ============================================================
+# Real secrets file (encryption key, DB password) - lives at /opt/n8n/.env
+.env
+*.env
+!.env.example
+
+# nginx basic-auth (hash + plaintext handoff)
+.htpasswd
+basic-auth.txt
+
+# Let's Encrypt / TLS material
+*.pem
+*.key
+*.crt
+
+# CLI tokens / auth profiles (subscription logins)
+clis/
+profiles/
+*.token
+*credentials*.json
+
+# Backups & dumps
+backups/
+*.dump
+*.tar.gz
+*.sql
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
