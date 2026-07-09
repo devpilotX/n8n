@@ -1,0 +1,45 @@
+{
+  "name": "02 - Switch AI Engine",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "c1111111-1111-4111-8111-111111111111",
+      "name": "When clicking Test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "e1", "name": "engine", "value": "claude", "type": "string" },
+            { "id": "e2", "name": "prompt", "value": "In one sentence, say which AI engine you are.", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c2222222-2222-4222-8222-222222222222",
+      "name": "Choose engine + prompt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.engine === 'codex' ? 'codex exec ' + JSON.stringify($json.prompt) : $json.engine === 'gemini' ? 'gemini -p ' + JSON.stringify($json.prompt) : 'claude -p ' + JSON.stringify($json.prompt) }}"
+      },
+      "id": "c3333333-3333-4333-8333-333333333333",
+      "name": "Run chosen engine",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [440, 0]
+    }
+  ],
+  "connections": {
+    "When clicking Test": { "main": [[{ "node": "Choose engine + prompt", "type": "main", "index": 0 }]] },
+    "Choose engine + prompt": { "main": [[{ "node": "Run chosen engine", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false
+}

@@ -1,0 +1,28 @@
+{
+  "name": "01 - Execute Command CLI Test",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "b1111111-1111-4111-8111-111111111111",
+      "name": "When clicking Test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "command": "echo \"claude: $(claude --version)\"; echo \"codex: $(codex --version)\"; echo \"gemini: $(gemini --version)\""
+      },
+      "id": "b2222222-2222-4222-8222-222222222222",
+      "name": "Run CLIs (version)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [220, 0]
+    }
+  ],
+  "connections": {
+    "When clicking Test": { "main": [[{ "node": "Run CLIs (version)", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false
+}
