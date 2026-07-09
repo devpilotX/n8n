@@ -1,0 +1,45 @@
+#!/bin/sh
+# ai-switch - manage subscription-CLI accounts (Claude Code / Codex / Gemini)
+# Runs INSIDE the n8n container. Config under $HOME=/opt/clis/home
+# Profiles under /opt/clis/profiles/<provider>/<name>
+# Deploy to /opt/n8n/clis/bin/ai-switch (container sees /opt/clis/bin/ai-switch on PATH)
+# Usage: ai-switch status | save <prov> <name> | use <prov> <name> | list [prov]
+# <prov> = claude | codex | gemini
+set -eu
+HOMEDIR="${HOME:-/opt/clis/home}"
+PROFILES="/opt/clis/profiles"
+cfg_dir() {
+  case "$1" in
+    claude) echo "$HOMEDIR/.claude" ;;
+    codex)  echo "$HOMEDIR/.codex" ;;
+    gemini) echo "$HOMEDIR/.gemini" ;;
+    *) echo "unknown provider: $1 (use claude|codex|gemini)" >&2; exit 2 ;;
+  esac
+}
+cmd="${1:-status}"
+case "$cmd" in
+  status)
+    for p in claude codex gemini; do
+      d="$(cfg_dir "$p")"
+      if [ -e "$d" ]; then
+        act="$(cat "$d/.active_profile" 2>/dev/null || echo '(logged in, unsaved)')"
+        echo "$p: $act"
+      else echo "$p: (not logged in)"; fi
+    done ;;
+  save)
+    prov="${2:?provider}"; name="${3:?profile name}"; src="$(cfg_dir "$prov")"
+    [ -e "$src" ] || { echo "No active $prov login to save at $src" >&2; exit 1; }
+    dst="$PROFILES/$prov/$name"; rm -rf "$dst"; mkdir -p "$dst"; cp -a "$src/." "$dst/"
+    echo "$name" > "$src/.active_profile"; echo "$name" > "$dst/.active_profile"
+    echo "Saved current $prov login as profile '$name'." ;;
+  use)
+    prov="${2:?provider}"; name="${3:?profile name}"; src="$PROFILES/$prov/$name"
+    [ -d "$src" ] || { echo "No saved $prov profile '$name'" >&2; exit 1; }
+    dst="$(cfg_dir "$prov")"; rm -rf "$dst"; mkdir -p "$dst"; cp -a "$src/." "$dst/"
+    echo "$name" > "$dst/.active_profile"; echo "Activated $prov profile '$name'." ;;
+  list)
+    prov="${2:-}"
+    if [ -n "$prov" ]; then ls -1 "$PROFILES/$prov" 2>/dev/null || echo "(no saved $prov profiles)";
+    else ls -1R "$PROFILES" 2>/dev/null || echo "(no saved profiles yet)"; fi ;;
+  *) echo "usage: ai-switch {status|save <prov> <name>|use <prov> <name>|list [prov]}" >&2; exit 2 ;;
+esac
