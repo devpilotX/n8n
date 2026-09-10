@@ -1,138 +1,131 @@
-# n8n — private self-hosted (n8n.devpilotx.com)
+# devpilotX / n8n
 
-Backup of the **configuration + workflows** for the private n8n instance at
-**https://n8n.devpilotx.com**. This repo does **NOT** contain n8n source code or
-any secrets. Secrets live only in `/opt/n8n/.env` on the server (chmod 600).
+n8n automation workflows built by **Dipanshu Kumar** ([@devpilotX](https://github.com/devpilotX)).
 
----
-
-## Architecture
-
-```
-Browser --HTTPS--> Cloudflare --HTTPS(LE origin cert)--> nginx (443)
-                                                          |  (temp Basic-Auth)
-                                                          v
-                                            n8n container 127.0.0.1:5678
-                                            (official n8nio/n8n image,
-                                             Docker host-networking)
-                                                          |
-                                                          v
-                                    EXISTING host PostgreSQL 127.0.0.1:5432
-                                            db "n8n" / user "n8n_user"
-```
-
-- **Image:** official `n8nio/n8n:latest` (no source build).
-- **Networking:** Docker `network_mode: host` so n8n reaches the loopback-only
-  host Postgres **without reconfiguring Postgres**. n8n binds to
-  `127.0.0.1:5678` only (`N8N_LISTEN_ADDRESS`) — never public.
-- **TLS:** Let's Encrypt ECDSA cert via **DNS-01 (dns-cloudflare)**; auto-renews.
-- **DB:** dedicated `n8n` database + `n8n_user` role (no rights on other DBs).
-
-### File layout on the VPS
-```
-/opt/n8n/
-├── .env                 # SECRETS (chmod 600): encryption key + DB password
-├── docker-compose.yml
-├── backup.sh            # daily DB + data backup (cron)
-├── data/                # n8n persistent data (.n8n) -> container /home/node/.n8n
-├── clis/                # subscription CLIs + logins -> container /opt/clis
-│   ├── bin/ (claude, codex, gemini, ai-switch)
-│   ├── home/ (.claude/.codex/.gemini logins = HOME in container)
-│   └── profiles/ (saved named logins for ai-switch)
-├── backups/             # nightly dumps (14-day retention)
-└── nginx/.htpasswd      # temporary Basic-Auth gate
-/etc/nginx/sites-available/n8n.devpilotx.com   # vhost (this repo: nginx/)
-/etc/cron.d/n8n-backup                          # daily 03:30 backup
-```
+> **Status as of 10 September 2026: NOT HOSTED.**
+> The VPS that previously ran `n8n.devpilotx.com` has been decommissioned. There is no live n8n instance, no live webhook endpoint, and no running database behind this repository. Everything here is source material: importable workflow JSON and archived infrastructure configuration.
 
 ---
 
-## First-time access & owner account
+## What this repository is now
 
-Deployed with the **setup screen ready**, protected by a **temporary nginx HTTP
-Basic-Auth** gate (so nobody grabs the owner account before you). Credentials
-are on the server at `/opt/n8n/nginx/basic-auth.txt`.
+A portfolio and source-of-truth repository for automation workflows I designed and built. Each workflow is a complete, importable n8n JSON file. They are designed to run, but they are **not currently running anywhere**, and several contain deliberate placeholder values that must be replaced before use (see [Placeholders](#placeholders-you-must-replace)).
 
-1. Open **https://n8n.devpilotx.com**.
-2. Browser prompt (Basic-Auth) -> enter the `owner-setup` user + password.
-3. n8n **"Set up owner account"** -> enter **your** email + strong password.
-
-### Enable 2FA (Google Authenticator)
-1. Log in -> top-left avatar -> **Settings**.
-2. **Personal -> Two-factor authentication -> Enable**.
-3. Scan the QR with Google Authenticator (or any TOTP app).
-4. Enter the 6-digit code to confirm.
-5. **SAVE THE RECOVERY CODES** — the only way back in if you lose the phone.
-
-### Removing / scoping the Basic-Auth gate
-```bash
-# Remove entirely (needed for public third-party webhooks):
-sudo sed -i '/auth_basic/d' /etc/nginx/sites-available/n8n.devpilotx.com
-sudo nginx -t && sudo systemctl reload nginx
-sudo rm -f /opt/n8n/nginx/basic-auth.txt
-```
+**How these were built, stated plainly:** I specified, architected, tested and debugged these systems using AI coding tools. I chose the problems, designed the data flow, defined the error and retry paths, and iterated until they worked. I did not hand-write the code line by line. I am saying this up front because I would rather be trusted than look impressive.
 
 ---
 
-## AI engines — two independent paths
+## Repository layout
 
-### A) Subscription CLIs (no API key) — via **Execute Command** node
-On PATH inside the container: **claude**, **codex**, **gemini**. Logins are
-interactive OAuth, done by you once (persist in `/opt/n8n/clis/home`):
-
-```bash
-# Claude Code (Claude Max/Pro):
-sudo docker exec -it -u node -e HOME=/opt/clis/home n8n claude setup-token
-# Codex (ChatGPT Plus/Pro):
-sudo docker exec -it -u node -e HOME=/opt/clis/home n8n codex        # "Sign in with ChatGPT"
-# Gemini CLI (free Google login):
-sudo docker exec -it -u node -e HOME=/opt/clis/home n8n gemini       # "Login with Google"
 ```
-Use in an **Execute Command** node: `claude -p "..."`, `codex exec "..."`,
-`gemini -p "..."`.
-
-**Switch accounts (token-based):**
-```bash
-sudo docker exec -u node -e HOME=/opt/clis/home n8n ai-switch save claude personal
-sudo docker exec -u node -e HOME=/opt/clis/home n8n ai-switch use  claude work
-sudo docker exec -u node -e HOME=/opt/clis/home n8n ai-switch status
+.
+├── workflow/                 # Main workflow library (7 production-scale systems)
+│   └── README.md             # Catalogue: node counts, webhooks, credentials, placeholders
+├── workflows/                # Legacy: 3 small test/utility workflows from the VPS era
+├── docker-compose.yml        # ARCHIVED - VPS-era self-host config, not in use
+├── nginx/                    # ARCHIVED - VPS-era reverse-proxy vhost, not in use
+├── scripts/                  # ARCHIVED - VPS-era backup + CLI switcher, not in use
+└── .env.example              # Template only. No real secrets have ever been committed.
 ```
-Import `workflows/02-switch-ai-engine.json` to flip engines from inside n8n.
 
-> **Kiro CLI** is installed on the host (`~/.local/bin/kiro-cli`) but left
-> **unauthenticated (optional / later)** — needs interactive device-flow login
-> (`kiro-cli login --use-device-flow`); from n8n call it via the SSH node.
+### Archived files
 
-### B) API-key path — via native nodes
-n8n: **Credentials -> + Create credential -> search provider -> paste key.**
-
-| Provider | Subscription (CLI) | API-key node | Get key |
-|---|---|---|---|
-| Anthropic | `claude` | **Anthropic** credential | console.anthropic.com |
-| OpenAI | `codex` | **OpenAI** credential | platform.openai.com/api-keys |
-| Google Gemini | `gemini` | **Google Gemini (PaLM) API** | aistudio.google.com/apikey |
-| OpenRouter | — | **OpenRouter** (one key, 100s of models) | openrouter.ai/keys |
-| Ollama | — | **NOT installed (skipped by request)** | — |
+`docker-compose.yml`, `nginx/n8n.devpilotx.com.conf`, `scripts/backup.sh` and `scripts/ai-switch` all assume a live server at `n8n.devpilotx.com` with host-networked PostgreSQL, Let's Encrypt DNS-01 certificates, nightly cron backups, UFW and fail2ban. **None of that exists any more.** They are kept deliberately as a record of infrastructure I designed and operated, not as working configuration. Do not run them expecting a result.
 
 ---
 
-## Maintenance
-```bash
-cd /opt/n8n
-sudo docker compose logs -f n8n                 # logs
-sudo docker compose restart n8n                 # restart
-sudo docker compose pull && sudo docker compose up -d && sudo docker image prune -f   # UPDATE
-sudo /opt/n8n/backup.sh                          # manual backup (nightly 03:30)
-```
-### Restore
-```bash
-sudo runuser -u postgres -- pg_restore --clean --if-exists -d n8n /opt/n8n/backups/n8n-db-YYYYMMDD-HHMMSS.dump
-sudo tar -xzf /opt/n8n/backups/n8n-data-YYYYMMDD-HHMMSS.tar.gz -C /opt/n8n
-```
-> Restore requires the same `N8N_ENCRYPTION_KEY` (in `/opt/n8n/.env`). Keep a
-> copy of `.env` off-server.
+## The workflow library
 
-## Security notes
-- Port 5678 bound to 127.0.0.1 only and not in the firewall — never public.
-- UFW: only 2222 (SSH), 80/443 (Cloudflare) open; fail2ban active.
-- Editor layers: Cloudflare -> Basic-Auth -> n8n owner login -> 2FA.
+Seven production-scale automation systems. Full detail in [`workflow/README.md`](workflow/README.md).
+
+| Workflow | Nodes | Domain |
+|---|---|---|
+| AP Payment Integrity & GST ITC Recovery Engine v1.0 | 111 | Accounts payable, GST input tax credit |
+| AI Business Operator v1 | 105 | Multi-channel AI front desk, voice, follow-up |
+| BharatAP — Zero-Leak Invoice-to-Pay & GST ITC Engine | 99 | Invoice-to-pay, GSTR-2B reconciliation |
+| MSME Receivables + IT s.43B(h) Compliance Autopilot | 67 | MSME receivables, 45-day compliance |
+| Coaching Institute Admission Engine v3.0 | 58 | Admissions lead response |
+| Clinic Appointment & Reputation Engine v3.0 | 54 | Appointments, review generation |
+| AI Admission Response Engine — Coaching Institute | 39 | Admissions enquiry agent |
+| **Total** | **533** | 10 webhook paths, 399 node connections |
+
+---
+
+## Running these without a server
+
+Since there is no VPS, pick one of these three:
+
+### 1. n8n Cloud (easiest, recommended)
+Sign up at [n8n.io](https://n8n.io). The Starter plan is around USD 24/month for roughly 5,000 executions. Webhooks, credentials storage and scheduling all work out of the box with no infrastructure to maintain. **This is the right choice if any of these workflows are going to a paying customer.**
+
+### 2. Local Docker (free)
+```bash
+docker run -it --rm \
+  --name n8n \
+  -p 5678:5678 \
+  -v n8n_data:/home/node/.n8n \
+  -e GENERIC_TIMEZONE="Asia/Kolkata" \
+  -e TZ="Asia/Kolkata" \
+  docker.io/n8nio/n8n
+```
+Open `http://localhost:5678`. Note that **inbound webhooks will not work from the public internet** unless you tunnel (for example with `cloudflared` or `ngrok`). Fine for development and demos.
+
+### 3. n8n Desktop (free)
+Download the desktop app. Same limitation on public webhooks.
+
+### Importing a workflow
+`Workflows` → `Import from File` → select the JSON from `workflow/` → then open each red-flagged node and attach credentials.
+
+---
+
+## Placeholders you must replace
+
+These workflows were built as complete designs but have **not** been connected to a live customer environment. Before any of them will run you must replace:
+
+| Placeholder | Appears in | Replace with |
+|---|---|---|
+| `https://your-n8n.com/webhook/...` | Clinic v3, Coaching v3 | Your real n8n webhook base URL |
+| `Bearer YOUR_PERMANENT_TOKEN` | Clinic v3, Coaching v3 | Meta WhatsApp Cloud API permanent token |
+| `https://g.page/r/YOUR_REVIEW_CODE/review` | Clinic v3 | The clinic's real Google review link |
+| `REPLACE_ERP_HOST` | AP Integrity Engine | Customer ERP hostname |
+| `REPLACE_GSP_HOST` | AP Integrity, BharatAP | GST Suvidha Provider endpoint |
+| `REPLACE_ITSM_HOST` | AP Integrity Engine | ITSM/ticketing endpoint |
+| `REPLACE_MCA_PROVIDER` | AP Integrity Engine | MCA data provider endpoint |
+| `https://n8n.example.com` | Several | Your n8n base URL |
+| `api.example-kyc.in`, `erp.internal.example`, `wiki.internal` | Several | Real internal endpoints |
+| `httpbin.org/post` | Test paths | Real target endpoint |
+
+Also set the sandbox-vs-production toggles: several workflows point at `api.sandbox.co.in/gst` and `einv-apisandbox.nic.in`, which are sandbox GST/e-invoice endpoints.
+
+---
+
+## Credentials required
+
+No credential values are stored in this repository — n8n exports contain credential *names* only. You will need to create these yourself in your own n8n instance:
+
+- **PostgreSQL** — `BharatAP Postgres`, `MSME Ledger Postgres`, plus AP Integrity's Postgres
+- **SMTP** — `BharatAP SMTP`, `MSME Outbound SMTP`, Coaching v3 SMTP
+- **Gmail OAuth2** and **IMAP** (`invoices@company.com`) — AP Integrity Engine
+- **Google Sheets OAuth2** — AP Integrity, Clinic v3, Coaching v3
+- **Slack API** — AP Integrity Engine
+- **Telegram Bot API** (`DevPilotX`) — Clinic v3, Coaching v3
+- **WhatsApp Trigger / HTTP Header Auth** (Meta Cloud API) — Clinic v3, Coaching v3
+- **OpenAI / Anthropic / Google Gemini** — several workflows
+- **Vapi** (voice) and **Cal.com** — AI Business Operator
+
+---
+
+## Security
+
+All seven workflow files were scanned before publication. **No live API keys, tokens, private keys, IP addresses or credential values are present.** The only bearer token string in the repository is the literal placeholder `YOUR_PERMANENT_TOKEN`. Three 32-character hex strings appear in the files; these are n8n internal `versionId` and `instanceId` values, not secrets.
+
+If you believe you have found a real secret in this repository, open an issue immediately and do not include the secret in the issue body.
+
+---
+
+## Contact
+
+**Dipanshu Kumar**
+connect.dipanshukumar@gmail.com · [linkedin.com/in/dipanshu03j](https://linkedin.com/in/dipanshu03j) · [github.com/devpilotX](https://github.com/devpilotX)
+
+Available for AI operations, automation implementation and n8n consulting work. Open to relocation and to remote.
